@@ -235,7 +235,6 @@ class RobotController:
         #print(f'v={self.speed}\t\tav={self._ang_vel}', end='\t\t')
         #print(f'Left Motor: {display_power(self.motorL.power)}\t\tRight Motor: {display_power(self.motorR.power)}')
 
-
     def set_power(self,/,left_motor:float=None,right_motor:float=None)->None:
         if left_motor is not None:
             self._tar_powerL = left_motor
@@ -424,6 +423,5 @@ class RobotController:
         return self._rot + av*dt
     def speed_to_power(self,speed:float)->float:
         return speed / self._speed_power_ratio
-    
     def power_to_speed(self,power:float)->float:
         return power * self._speed_power_ratio
