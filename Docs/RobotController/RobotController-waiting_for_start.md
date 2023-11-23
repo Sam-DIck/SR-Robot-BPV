@@ -1,4 +1,4 @@
-# [RobotController](#RobotController).waiting_for_start
+# [RobotController](../RobotController/RobotController).waiting_for_start
 
 ## Definition
 waiting_for_start:bool

@@ -1,3 +1,3 @@
 # SR-Robot-BPV
 
-### [Docs](#RobotController)
+### [Docs](./Docs.md)

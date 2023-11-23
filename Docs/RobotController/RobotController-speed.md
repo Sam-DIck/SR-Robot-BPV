@@ -1,4 +1,4 @@
-# [RobotController](#RobotController).speed
+# [RobotController](../RobotController/RobotController).speed
 
 ## Definition
 speed:float

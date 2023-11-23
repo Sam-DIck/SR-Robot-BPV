@@ -1,10 +1,10 @@
-# RobotController Constructor
+# [RobotController](./RobotController.md) Constructor
 
 ## Declaration
-RobotController(
-&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;left_motor:[MotorMapping](#MotorMapping), right_motor:[MotorMapping](#MotorMapping), 
-&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;wheel_base:float, camera_displacement:[Vec3](#Vec3), speed_power_ratio:float,
-&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;vel_PID:[PID](#PID), ang_PID:[PID](#PID))
+RobotController(<br>
+&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;left_motor:[MotorMapping](../MotorMapping/MotorMapping.md), right_motor:[MotorMapping](../MotorMapping/MotorMapping.md), <br>
+&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;wheel_base:float, camera_displacement:[Vec3](../Vec3/Vec3.md), speed_power_ratio:float,<br>
+&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;vel_PID:[PID](../PID/PID.md), ang_PID:[PID](../PID/PID.md))<br>
 )
 ## Description
 Creates a RobotController

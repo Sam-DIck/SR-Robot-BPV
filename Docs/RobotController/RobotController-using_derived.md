@@ -1,4 +1,4 @@
-# [RobotController](#RobotController).using_derived
+# [RobotController](../RobotController/RobotController).using_derived
 
 ## Definition
 using_derived:bool

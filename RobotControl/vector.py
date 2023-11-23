@@ -24,8 +24,6 @@ class Vec3:
         else:
             raise ValueError("No overload of Vec3.__init__ accepts 2 arguments")
     
-    
-
     @property
     def sqr_magnitude(self)->float:
         return (self.x**2+self.y**2+self.z**2)
@@ -73,19 +71,6 @@ class Vec3:
             other=Vec3(other)
         return Vec3(self.x%other.x,self.y%other.y,self.z%other.z)
 
-    # bitwise operators
-    def __lshift__(self,shift:int)->Vec3:
-        return self*(2**shift)
-    def __rshift__(self,shift:int)->Vec3:
-        return self<<(-shift)
-    def __and__(self,other:Vec3)->Vec3:
-        return Vec3(self.x & other.x, self.y & other.y,self.z & other.z)
-    def __or__(self,other:Vec3)->Vec3:
-        return Vec3(self.x | other.x, self.y | other.y,self.z | other.z)
-    def __xor__(self,other:Vec3)->Vec3:
-        return Vec3(self.x ^ other.x, self.y ^ other.y,self.z ^ other.z)
-    def __invert__(self)->Vec3:
-        return Vec3(~self.x ,~self.y,~self.z)
     
     # comparison operators
     def __eq__(self,other:Vec3)->bool:
