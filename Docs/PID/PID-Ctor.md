@@ -1,7 +1,7 @@
 # [MotorMapping](./PID.md) Constructor
 
 ## Declaration
-MotorMapping(initial_value:float,kp:float,ki:float,kd:float)
+PID(initial_value:float,kp:float,ki:float,kd:float)
 ## Description
 Creates a MotorMapping
 ```
