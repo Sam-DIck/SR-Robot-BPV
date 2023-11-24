@@ -1,7 +1,7 @@
 from ast import Not
 from sr.robot3 import Robot
 from sr.robot3.coordinates import vectors
-from sr.robot3.motor_devices import Motor
+from sr.robot3.motor_devices import Motor # type: ignore
 from sr.robot3.camera import Marker
 from .vector import Vec3
 from .PID import PID
@@ -86,10 +86,10 @@ class RobotController:
     _PID_angvel:PID=PID(0,kp=0,ki=0,kd=0)
 
     # kinematics
-    _pos:Vec3=None
-    _vel:Vec3=None
-    _rot:float=None
-    _ang_vel:float=None
+    _pos:Vec3=None # type: ignore
+    _vel:Vec3=None # type: ignore
+    _rot:float=None # type: ignore
+    _ang_vel:float=None # type: ignore
     _lt:float=_robot.time()
     
     # status
@@ -186,7 +186,7 @@ class RobotController:
             else:
                 self._rot=0
         if rot is None:
-            rot = self.get_rot_prediction(self,dt)
+            rot = self.get_rot_prediction(dt)
         self._ang_vel = (rot-self._rot)/dt
 
         if self._pos is None:
@@ -235,7 +235,7 @@ class RobotController:
         #print(f'v={self.speed}\t\tav={self._ang_vel}', end='\t\t')
         #print(f'Left Motor: {display_power(self.motorL.power)}\t\tRight Motor: {display_power(self.motorR.power)}')
 
-    def set_power(self,/,left_motor:float=None,right_motor:float=None)->None:
+    def set_power(self,/,left_motor:float|None=None,right_motor:float|None=None)->None:
         if left_motor is not None:
             self._tar_powerL = left_motor
             self._driving_mode=DRIVING_MODE_POWER
@@ -243,7 +243,7 @@ class RobotController:
             self._tar_powerR=right_motor
             self._driving_mode=DRIVING_MODE_POWER
     
-    def set_relative(self,/,speed:float=0,ang_vel:float=None)->None:
+    def set_relative(self,/,speed:float=0,ang_vel:float|None=None)->None:
         self._tar_speed = speed
         self._driving_mode=DRIVING_MODE_RELATIVE
         if ang_vel is not None:
@@ -251,6 +251,7 @@ class RobotController:
         else:
             self._tar_ang_vel=0
         if ang_vel!=0:
+            ang_vel=self._tar_ang_vel
             radius=speed/ang_vel
             self.motorL.power = self.speed_to_power(ang_vel*(radius - self._wheel_base/2))
             self.motorR.power = self.speed_to_power(ang_vel*(radius + self._wheel_base/2))
@@ -265,15 +266,6 @@ class RobotController:
                                 0
                           )
 
-    
-    # def set_power(self,/,left_motor:float=None,right_motor:float=None)->None:
-    #     if left_motor is not None:
-    #         self._tar_powerL = left_motor
-    #         self._driving_mode=DRIVING_MODE_POWER
-    #     if right_motor is not None:
-    #         self._tar_powerR=right_motor
-    #         self._driving_mode=DRIVING_MODE_POWER
-
     def stop(self)->None:
         self.set_power(
             left_motor=0,
@@ -284,7 +276,7 @@ class RobotController:
     def sleep(self,time:float)->None:
         self._robot.sleep(time)
 
-    def get_position(self,/,precise:bool=True)->Vec3:
+    def get_position(self,/,precise:bool=True)->Vec3|None:
         pos = self._get_position(precise)
         if pos is None:
             return None
@@ -294,12 +286,12 @@ class RobotController:
             offset = Vec3(cos(co_X)-sin(co_Y),sin(co_X)+cos(co_Y),0)
             return pos
 
-    def _get_position(self,precise:bool)->Vec3:
+    def _get_position(self,precise:bool)->Vec3|None:
         '''precise - True gives a more accurate reading however requires at least 2 wall markers'''
         markers = self.wall_markers
         if precise:
             if len(markers)>=2:
-                pair = (None,None)
+                pair:tuple[Marker,Marker] = (None,None) # type: ignore
                 best = 1e8
                 for mA in markers:
                     for mB in [m for m in markers if m != mA]:
@@ -310,7 +302,7 @@ class RobotController:
                 pA,pB = WALL_MARKER_POSIIONS[pair[0].id],WALL_MARKER_POSIIONS[pair[1].id]
                 dA = pair[0].position.distance/1000
                 dB = pair[1].position.distance/1000
-                def get_intersections(x0, y0, r0, x1, y1, r1):
+                def get_intersections(x0, y0, r0, x1, y1, r1)->tuple[tuple[float,float],tuple[float,float]]|None:
                     # circle 1: (x0, y0), radius r0
                     # circle 2: (x1, y1), radius r1
                     d=sqrt((x1-x0)**2 + (y1-y0)**2)
@@ -337,7 +329,7 @@ class RobotController:
                 if intersections is None:
                     return None
                 if intersections[0]==intersections[1]:
-                    return (intersections[0][0],intersections[0][1])
+                    return Vec3(intersections[0][0],intersections[0][1],0)
                 else:
                     intA = (pA[0]-intersections[0][0])*(pB[0]-intersections[0][0]) + (pA[1]-intersections[0][1])*(pB[1]-intersections[0][1])
                     intB = (pA[0]-intersections[0][0])*(pB[0]-intersections[1][0]) + (pA[1]-intersections[0][1])*(pB[1]-intersections[1][1])
@@ -351,7 +343,7 @@ class RobotController:
             if len(markers)==0: return None
             tx,ty = 0,0
             for m in markers:
-                ang:float
+                ang:float = 0
                 if 0<=m.id<7:
                     ang=m.orientation.yaw-pi/2
                 elif 7<=m.id<14:
@@ -368,12 +360,12 @@ class RobotController:
                 ty+=py
             return Vec3(tx/len(markers),ty/len(markers),0)
 
-    def get_rotation(self)->float:
+    def get_rotation(self)->float|None:
         markers = self.wall_markers
         if len(markers)==0: return None
         total = 0
         for m in markers:
-            ang:float
+            ang:float = 0
             if 0<=m.id<7:
                 ang=m.orientation.yaw-pi/2
             elif 7<=m.id<14:
@@ -396,6 +388,7 @@ class RobotController:
         radius = self._wheel_base*(L + R) / (2*(L-R))
         if radius==0: return 0
         return self._vel.magnitude / radius
+    
     def get_pos_prediction(self,dt,/,use_true:bool=False)->Vec3:
         av = self.get_ang_vel_prediction()
         vel = self.get_speed_prediction()
@@ -415,13 +408,16 @@ class RobotController:
         
         else:
             return self._pos + Vec3.from_angle(self._rot) * vel
+    
     def get_rot_prediction(self,dt,/,use_true:bool=False)->float:
         av=self.get_ang_vel_prediction()
         if use_true:
             if self._ang_vel is not None:
                 av=self._ang_vel
         return self._rot + av*dt
+    
     def speed_to_power(self,speed:float)->float:
         return speed / self._speed_power_ratio
+    
     def power_to_speed(self,power:float)->float:
         return power * self._speed_power_ratio
