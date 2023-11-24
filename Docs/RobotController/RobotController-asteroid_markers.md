@@ -1,4 +1,4 @@
-# [RobotController](../RobotController/RobotController).asteroid_markers
+# [RobotController](./RobotController.md).asteroid_markers
 
 ## Definition
 asteroid_markers:list[[Marker](https://studentrobotics.org/docs/programming/vision/markers)]

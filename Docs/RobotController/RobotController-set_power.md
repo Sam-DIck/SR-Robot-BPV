@@ -1,4 +1,4 @@
-# [RobotController](../RobotController/RobotController).set_power
+# [RobotController](./RobotController.md).set_power
 
 ## Definition
 set_power(left_motor:float,right_motor:float)->None

@@ -1,4 +1,4 @@
-# [RobotController](../RobotController/RobotController).stop
+# [RobotController](./RobotController.md).stop
 
 ## Definition
 stop()->None

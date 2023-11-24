@@ -1,4 +1,4 @@
-# [RobotController](../RobotController/RobotController).get_marker_position
+# [RobotController](./RobotController.md).get_marker_position
 
 ## Definition
 get_marker_position(marker:[Marker](https://studentrobotics.org/docs/programming/vision/markers))->[Vec3](../Vec3/Vec3.md)

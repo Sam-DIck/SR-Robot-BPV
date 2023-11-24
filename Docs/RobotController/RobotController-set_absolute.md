@@ -1,7 +1,7 @@
-# [RobotController](../RobotController/RobotController).set_absolute
+# [RobotController](./RobotController.md).set_absolute
 
 ## Definition
-set_absolute(position:[Vec3](../Vec3/Vec3.md))->None
+set_absolute(position:[Vec3](../Vec3/Vec3.md))->None<br>
 set_absolute(position:[Vec3](../Vec3/Vec3.md),rotation:float)->None
 
 ## Description

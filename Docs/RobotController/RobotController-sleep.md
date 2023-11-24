@@ -1,4 +1,4 @@
-# [RobotController](../RobotController/RobotController).sleep
+# [RobotController](./RobotController.md).sleep
 
 ## Definition
 sleep(time:float)->None

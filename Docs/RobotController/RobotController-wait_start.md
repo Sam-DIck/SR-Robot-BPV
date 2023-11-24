@@ -1,4 +1,4 @@
-# [RobotController](../RobotController/RobotController).wait_start
+# [RobotController](./RobotController.md).wait_start
 
 ## Definition
 wait_start()->None

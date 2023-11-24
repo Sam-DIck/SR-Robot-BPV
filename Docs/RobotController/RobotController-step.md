@@ -1,4 +1,4 @@
-# [RobotController](../RobotController/RobotController).step
+# [RobotController](./RobotController.md).step
 
 ## Definition
 step()-None

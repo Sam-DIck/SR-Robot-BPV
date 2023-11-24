@@ -1,4 +1,4 @@
-# [RobotController](../RobotController/RobotController).wall_markers
+# [RobotController](./RobotController.md).wall_markers
 
 ## Definition
 wall_markers:list[[Marker](https://studentrobotics.org/docs/programming/vision/markers)]
