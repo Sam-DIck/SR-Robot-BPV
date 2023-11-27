@@ -4,4 +4,4 @@
 waiting_for_start:bool
 
 ## Description
-Used to determine whether the match has started.
+Used to determine whether the match has started
