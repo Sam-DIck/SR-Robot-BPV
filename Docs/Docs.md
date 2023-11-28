@@ -4,6 +4,6 @@ Please Note the Library is incomplete the docs represent what the Library will l
 
 
 ### [RobotController](./RobotController/RobotController.md)
-### [MotorMapping](./MotorMapping/MototMapping.md)
+### [MotorMapping](./MotorMapping/MotorMapping.md)
 ### [Vec3](./Vec3/Vec3.md)
 ### [PID](./PID/PID.md)
