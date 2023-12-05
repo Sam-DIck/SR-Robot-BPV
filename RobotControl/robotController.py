@@ -1,6 +1,4 @@
-from ast import Not
 from sr.robot3 import Robot
-from sr.robot3.coordinates import vectors
 from sr.robot3.motor_devices import Motor # type: ignore
 from sr.robot3.camera import Marker
 from .vector import Vec3
@@ -155,14 +153,6 @@ class RobotController:
         if self.waiting_for_start:
             self._robot.wait_start()
             self._status^=WAITING_FOR_START
-            pos = self.get_position()
-            if pos is None:
-                pos = self.get_position(precise=False)
-                if pos is None:
-                    pos = Vec3()
-            rot = self.get_rotation()
-            if rot is None:
-                rot = 0
 
         else:
             raise InvalidMethodCallException('wait_start',before=True)
@@ -174,12 +164,8 @@ class RobotController:
         t = self._robot.time()
         dt=t-self._lt
         self._lt=t
-        pos = self.get_position()
-        if pos is None:
-            pos = self.get_position(precise=False)
-        rot = self.get_rotation()
-        self._status&= ~USING_DERIVED
 
+        rot = self.get_rotation()
         if self._rot is None:
             if rot is not None:
                 self._rot = rot
@@ -188,6 +174,12 @@ class RobotController:
         if rot is None:
             rot = self.get_rot_prediction(dt)
         self._ang_vel = (rot-self._rot)/dt
+
+        pos = self.get_position()
+        if pos is None:
+            pos = self.get_position(precise=False)
+        
+        self._status&= ~USING_DERIVED
 
         if self._pos is None:
             self._vel = Vec3()
@@ -283,8 +275,8 @@ class RobotController:
         else:
             co_X=self._camera_displacement.x
             co_Y=self._camera_displacement.y
-            offset = Vec3(cos(co_X)-sin(co_Y),sin(co_X)+cos(co_Y),0)
-            return pos
+            offset = Vec3(co_X*cos(self._rot)-co_Y*sin(self._rot),co_X*sin(self._rot)+co_Y*cos(self._rot),0)
+            return pos+offset
 
     def _get_position(self,precise:bool)->Vec3|None:
         '''precise - True gives a more accurate reading however requires at least 2 wall markers'''
@@ -387,7 +379,7 @@ class RobotController:
         if R==L: return 0
         radius = self._wheel_base*(L + R) / (2*(L-R))
         if radius==0: return 0
-        return self._vel.magnitude / radius
+        return self.get_speed_prediction() / radius
     
     def get_pos_prediction(self,dt,/,use_true:bool=False)->Vec3:
         av = self.get_ang_vel_prediction()
