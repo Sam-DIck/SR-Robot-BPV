@@ -177,7 +177,7 @@ class RobotController:
 
         pos = self.get_position()
         if pos is None:
-            pos = self.get_position(precise=False)
+            pos = self.get_position()
         
         self._status&= ~USING_DERIVED
 
