@@ -9,20 +9,19 @@ R=RobotController(
     camera_displacement=Vec3(0,0.07,0),
     speed_power_ratio=1.25,
 
-    vel_PID=PID(0,kp=-0.05,ki=-0.05,kd=0),
-    ang_PID=PID(0,kp=0,ki=0,kd=0)
+    vel_PID=PID(0,kp=-0.1,ki=0,kd=0),
+    ang_PID=PID(0,kp=0.05,ki=0,kd=0)
 )
 
 R.wait_start()
+st = R._robot.time()
+while R._robot.time()-st<5:
+    R.step()
 print("started")
 R.set_relative(
     speed=0.1,
-    ang_vel=0
 )
-# R.set_power(
-#     left_motor=0.175,
-#     right_motor=0.2
-# )
+
 st = R._robot.time()
 R.sleep(0.1)
 with open('data.csv','w+') as f:

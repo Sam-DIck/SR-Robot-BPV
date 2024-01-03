@@ -4,7 +4,7 @@ from sr.robot3.camera import Marker
 from .vector import Vec3
 from .PID import PID
 from .Util import display_power
-from math import sin,cos,sqrt,pi
+from math import sin,cos,tan,sqrt,pi
 
 FILTERING_ALPHA=1
 
@@ -20,37 +20,37 @@ DRIVING_MODE_ABSOLUTE=2
 DRIVING_MODE_POWER=3
 
 WALL_MARKER_POSIIONS = [
-    (2.153 ,-2.875),
-    (1.438 ,-2.850),
-    (.718  ,-2.850),
-    (0     ,-2.850),
-    (-.718 ,-2.850),
-    (-1.438,-2.850),
-    (-2.153,-2.850),
+    (2.154 ,-2.875),
+    (1.436 ,-2.875),
+    (.718  ,-2.875),
+    (0     ,-2.875),
+    (-.718 ,-2.875),
+    (-1.436,-2.875),
+    (-2.154,-2.875),
 
-    (-2.875, 2.153),
-    (-2.875, 1.438),
+    (-2.875, 2.154),
+    (-2.875, 1.436),
     (-2.875, 0.718),
     (-2.875, 0    ),
     (-2.875,-0.718),
-    (-2.875,-1.438),
-    (-2.875,-2.153),
+    (-2.875,-1.436),
+    (-2.875,-2.154),
 
-    (-2.153, 2.875),
-    (-1.438, 2.850),
-    (-.718 , 2.850),
-    (0     , 2.850),
-    (.718  , 2.850),
-    (1.438 , 2.850),
-    (2.153 , 2.850),
+    (-2.154, 2.875),
+    (-1.435, 2.875),
+    (-.718 , 2.875),
+    (0     , 2.875),
+    (.718  , 2.875),
+    (1.436 , 2.875),
+    (2.154 , 2.875),
 
-    (2.875 ,  2.153),
-    (2.875 ,  1.438),
+    (2.875 ,  2.152),
+    (2.875 ,  1.436),
     (2.875 ,  0.718),
     (2.875 ,  0    ),
     (2.875 , -0.718),
-    (2.875 , -1.438),
-    (2.875 , -2.153)
+    (2.875 , -1.436),
+    (2.875 , -2.154)
 ]
 
 
@@ -206,7 +206,6 @@ class RobotController:
             v = self._PID_speed.calc_strength(self.speed,dt=dt)
             
             self._PID_angvel.set_target(self._tar_ang_vel)
-            print(self._ang_vel)
             a = self._PID_angvel.calc_strength(self._ang_vel,dt=dt)
             if self._tar_speed > 0:
                 v = min(1,max(0,v))
@@ -224,8 +223,6 @@ class RobotController:
         
         self.motorL.power = min(1,max(-1,powerL))
         self.motorR.power = min(1,max(-1,powerR))
-        #print(f'v={self.speed}\t\tav={self._ang_vel}', end='\t\t')
-        #print(f'Left Motor: {display_power(self.motorL.power)}\t\tRight Motor: {display_power(self.motorR.power)}')
 
     def set_power(self,/,left_motor:float|None=None,right_motor:float|None=None)->None:
         if left_motor is not None:
@@ -236,14 +233,14 @@ class RobotController:
             self._driving_mode=DRIVING_MODE_POWER
     
     def set_relative(self,/,speed:float=0,ang_vel:float|None=None)->None:
-        self._tar_speed = speed
         self._driving_mode=DRIVING_MODE_RELATIVE
+        self._tar_speed = speed
         if ang_vel is not None:
             self._tar_ang_vel=ang_vel
         else:
             self._tar_ang_vel=0
+        ang_vel=self._tar_ang_vel
         if ang_vel!=0:
-            ang_vel=self._tar_ang_vel
             radius=speed/ang_vel
             self.motorL.power = self.speed_to_power(ang_vel*(radius - self._wheel_base/2))
             self.motorR.power = self.speed_to_power(ang_vel*(radius + self._wheel_base/2))
@@ -268,8 +265,8 @@ class RobotController:
     def sleep(self,time:float)->None:
         self._robot.sleep(time)
 
-    def get_position(self,/,precise:bool=True)->Vec3|None:
-        pos = self._get_position(precise)
+    def get_position(self,/)->Vec3|None:
+        pos = self._get_position()
         if pos is None:
             return None
         else:
@@ -278,79 +275,43 @@ class RobotController:
             offset = Vec3(co_X*cos(self._rot)-co_Y*sin(self._rot),co_X*sin(self._rot)+co_Y*cos(self._rot),0)
             return pos+offset
 
-    def _get_position(self,precise:bool)->Vec3|None:
-        '''precise - True gives a more accurate reading however requires at least 2 wall markers'''
-        markers = self.wall_markers
-        if precise:
-            if len(markers)>=2:
-                pair:tuple[Marker,Marker] = (None,None) # type: ignore
-                best = 1e8
-                for mA in markers:
-                    for mB in [m for m in markers if m != mA]:
-                        angle_dif = mA.position.horizontal_angle - mB.position.horizontal_angle
-                        if abs(abs(angle_dif)-pi/2)<=best-pi/2:
-                            pair = (mA,mB)
-                            best = abs(angle_dif)
-                pA,pB = WALL_MARKER_POSIIONS[pair[0].id],WALL_MARKER_POSIIONS[pair[1].id]
-                dA = pair[0].position.distance/1000
-                dB = pair[1].position.distance/1000
-                def get_intersections(x0, y0, r0, x1, y1, r1)->tuple[tuple[float,float],tuple[float,float]]|None:
-                    # circle 1: (x0, y0), radius r0
-                    # circle 2: (x1, y1), radius r1
-                    d=sqrt((x1-x0)**2 + (y1-y0)**2)
-                    # non intersecting
-                    if d > r0 + r1 :
-                        return None
-                    # One circle within other
-                    if d < abs(r0-r1):
-                        return None
-                    # coincident circles
-                    if d == 0 and r0 == r1:
-                        return None
-                    else:
-                        a=(r0**2-r1**2+d**2)/(2*d)
-                        h=sqrt(r0**2-a**2)
-                        x2=x0+a*(x1-x0)/d   
-                        y2=y0+a*(y1-y0)/d   
-                        x3=x2+h*(y1-y0)/d     
-                        y3=y2-h*(x1-x0)/d 
-                        x4=x2-h*(y1-y0)/d
-                        y4=y2+h*(x1-x0)/d
-                        return ((x3, y3), (x4, y4))
-                intersections = get_intersections(pA[0],pA[1],dA,pB[0],pB[1],dB)
-                if intersections is None:
-                    return None
-                if intersections[0]==intersections[1]:
-                    return Vec3(intersections[0][0],intersections[0][1],0)
-                else:
-                    intA = (pA[0]-intersections[0][0])*(pB[0]-intersections[0][0]) + (pA[1]-intersections[0][1])*(pB[1]-intersections[0][1])
-                    intB = (pA[0]-intersections[0][0])*(pB[0]-intersections[1][0]) + (pA[1]-intersections[0][1])*(pB[1]-intersections[1][1])
-                    if -2875<intersections[0][0]<2875 and -2875<intersections[0][1]<2875:
-                        return Vec3(intersections[0][0],intersections[0][1],0)
-                    else:
-                        return Vec3(intersections[1][0],intersections[1][1],0)
-            else:
-                return None
-        else:
-            if len(markers)==0: return None
-            tx,ty = 0,0
-            for m in markers:
-                ang:float = 0
-                if 0<=m.id<7:
-                    ang=m.orientation.yaw-pi/2
-                elif 7<=m.id<14:
-                    ang=m.orientation.yaw+pi
-                elif 14<=m.id<21:
-                    ang=m.orientation.yaw+pi/2
-                elif 21<=m.id<28:
-                    ang=m.orientation.yaw
-                ang = (ang + pi) % (2 * pi) - pi
-                mpos = WALL_MARKER_POSIIONS[m.id]
-                px=mpos[0] - m.position.distance*cos(ang)/1000
-                py=mpos[1] - m.position.distance*sin(ang)/1000
-                tx+=px
-                ty+=py
-            return Vec3(tx/len(markers),ty/len(markers),0)
+    def _get_position(self)->Vec3|None:
+        ang = self._rot
+        best = 0
+        pair:tuple[Marker,Marker]|None = None
+        for mA in self.wall_markers:
+            for mB in [m for m in self.wall_markers if m != mA]:
+                angle_dif = mA.position.horizontal_angle - mB.position.horizontal_angle
+                if abs(abs(angle_dif)-pi/2)<=abs(best-pi/2):
+                    pair = (mA,mB)
+                    best = abs(angle_dif)
+        if pair != None:
+            theta1 = pair[0].orientation.yaw - pair[0].position.horizontal_angle
+            if 0<=pair[0].id<7:
+                theta1+=-pi/2
+            elif 7<=pair[0].id<14:
+                theta1+=pi
+            elif 14<=pair[0].id<21:
+                theta1+=pi/2
+            elif 21<=pair[0].id<28:
+                theta1+=0
+            theta2 = pair[1].orientation.yaw - pair[1].position.horizontal_angle
+            if 0<=pair[1].id<7:
+                theta2+=-pi/2
+            elif 7<=pair[1].id<14:
+                theta2+=pi
+            elif 14<=pair[1].id<21:
+                theta2+=pi/2
+            elif 21<=pair[1].id<28:
+                theta2+=0
+
+
+            m1x,m1y=WALL_MARKER_POSIIONS[pair[0].id]
+            m2x,m2y=WALL_MARKER_POSIIONS[pair[1].id]
+
+            x = (tan(theta2)*m2x - tan(theta1)*m1x+m1y-m2y)/(tan(theta2)-tan(theta1))
+            y = m1y-tan(theta1)*x-tan(theta1)*m1x
+            return Vec3(x=x,y=y,z=0)
 
     def get_rotation(self)->float|None:
         markers = self.wall_markers
