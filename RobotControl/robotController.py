@@ -3,7 +3,6 @@ from sr.robot3.motor_devices import Motor # type: ignore
 from sr.robot3.camera import Marker
 from .vector import Vec3
 from .PID import PID
-from .Util import display_power
 from math import sin,cos,tan,sqrt,pi
 
 FILTERING_ALPHA=1
@@ -53,7 +52,13 @@ WALL_MARKER_POSIIONS = [
     (2.875 , -2.154)
 ]
 
-
+from time import time
+__debug_start_time = time()
+def Print(*args, **kwargs):
+    t= time()-__debug_start_time
+    sec = round(t%60,3)
+    min = round((t/60))
+    print(f"{min}:{sec}\t| ",*args, **kwargs)
 
 class InvalidMethodCallException(Exception):
     def __init__(self,method_name:str,/,before:bool=False):
@@ -79,6 +84,8 @@ class RobotController:
     _camera_displacement:Vec3=Vec3()
     _speed_power_ratio:float=1.25
 
+    _target_dt:float=0
+
     #PID
     _PID_speed:PID=PID(0,kp=0,ki=0,kd=0)
     _PID_angvel:PID=PID(0,kp=0,ki=0,kd=0)
@@ -95,6 +102,7 @@ class RobotController:
     _driving_mode:int=DRIVING_MODE_NONE
 
     # generated
+    
     _markers:list[Marker]|None=None
 
     # control targets
@@ -111,7 +119,8 @@ class RobotController:
                  camera_displacement:Vec3,
                  speed_power_ratio:float,
                  vel_PID:PID,
-                 ang_PID:PID)->None:
+                 ang_PID:PID,
+                 target_dt:float=0.01)->None:
         self._motorL=left_motor
         self._motorR=right_motor
         self._wheel_base=wheel_base
@@ -121,6 +130,7 @@ class RobotController:
         self._PID_angvel=ang_PID
         self.motorL.power=0
         self.motorR.power=0
+        self._target_dt=target_dt
 
     @property
     def waiting_for_start(self)->bool:
@@ -139,42 +149,48 @@ class RobotController:
         return self._robot.motor_boards[self._motorR.motor_board].motors[self._motorR.motor_index]
     @property
     def markers(self)->list[Marker]:
+        Print("markers: checking for markers")
         if self._markers is None:
-            self._markers = sorted(self._robot.camera.see(),key=lambda x:x.id)
+            self._robot.sleep(0.1)
+            Print("markers: detecting markers")
+            m = self._robot.camera.see()
+            Print("markers: markers detected")
+            self._markers = sorted(m,key=lambda x:x.id)
+            Print("markers: markers sorted")
         return self._markers
     @property
     def wall_markers(self)->list[Marker]:
+        Print("wall_markers: querying markers")
         return [m for m in self.markers if 0<=m.id<28]
     @property
     def asteroid_markers(self)->list[Marker]:
         return [m for m in self.markers if 150<=m.id<=199]
     
-    def wait_start(self)->None:
-        if self.waiting_for_start:
-            self._robot.wait_start()
-            self._status^=WAITING_FOR_START
-
-        else:
-            raise InvalidMethodCallException('wait_start',before=True)
-    
-    def step(self)->None:
+    def _step(self,dt)->None:
+        Print("_step: step occuring")
+        if dt <=0:
+            Print(f"_step: Invalid timestep({dt}s)")
+            dt = max(0.01,dt)
         if self.waiting_for_start:
             raise InvalidMethodCallException('step')
         self._markers=None
-        t = self._robot.time()
-        dt=t-self._lt
-        self._lt=t
 
+        Print("_step: getting rotation")
         rot = self.get_rotation()
         if self._rot is None:
             if rot is not None:
                 self._rot = rot
             else:
                 self._rot=0
+        
         if rot is None:
+            Print("_step: getting prediction")
             rot = self.get_rot_prediction(dt)
+        Print("_step: calculating ang vel")
         self._ang_vel = (rot-self._rot)/dt
 
+
+        Print("_step: getting position")
         pos = self.get_position()
         if pos is None:
             pos = self.get_position()
@@ -199,9 +215,11 @@ class RobotController:
         powerR = self.motorR.power
 
         if self._driving_mode==DRIVING_MODE_NONE:
+            Print("_step: driving mode: None")
             self.motorL.power = 0
             self.motorR.power = 0
         elif self._driving_mode==DRIVING_MODE_RELATIVE:
+            Print("_step: driving mode: Relative")
             self._PID_speed.set_target(self._tar_speed)
             v = self._PID_speed.calc_strength(self.speed,dt=dt)
             
@@ -216,13 +234,17 @@ class RobotController:
             
             
         elif self._driving_mode==DRIVING_MODE_ABSOLUTE:
+            Print("_step: driving mode: Absolute")
             pass
         elif self._driving_mode==DRIVING_MODE_POWER:
+            Print("_step: driving mode: Power")
             powerL = self._tar_powerL
             powerR = self._tar_powerR
         
+        Print("_step: clamp power")
         self.motorL.power = min(1,max(-1,powerL))
         self.motorR.power = min(1,max(-1,powerR))
+        Print("_step: complete")
 
     def set_power(self,/,left_motor:float|None=None,right_motor:float|None=None)->None:
         if left_motor is not None:
@@ -256,15 +278,10 @@ class RobotController:
                           )
 
     def stop(self)->None:
-        self.set_power(
-            left_motor=0,
-            right_motor=0
-        )
+        self.motorL.power=0
+        self.motorR.power=0
         self._driving_mode=DRIVING_MODE_NONE
     
-    def sleep(self,time:float)->None:
-        self._robot.sleep(time)
-
     def get_position(self,/)->Vec3|None:
         pos = self._get_position()
         if pos is None:
@@ -279,8 +296,9 @@ class RobotController:
         ang = self._rot
         best = 0
         pair:tuple[Marker,Marker]|None = None
-        for mA in self.wall_markers:
-            for mB in [m for m in self.wall_markers if m != mA]:
+        markers = self.wall_markers
+        for mA in markers:
+            for mB in [m for m in markers if m.id < mA.id]:
                 angle_dif = mA.position.horizontal_angle - mB.position.horizontal_angle
                 if abs(abs(angle_dif)-pi/2)<=abs(best-pi/2):
                     pair = (mA,mB)
@@ -314,9 +332,12 @@ class RobotController:
             return Vec3(x=x,y=y,z=0)
 
     def get_rotation(self)->float|None:
+        Print("get_rotation: getting markers")
         markers = self.wall_markers
+        Print("get_rotation: checking marker count")
         if len(markers)==0: return None
         total = 0
+        Print("get_rotation: calculating sum")
         for m in markers:
             ang:float = 0
             if 0<=m.id<7:
@@ -328,7 +349,7 @@ class RobotController:
             elif 21<=m.id<28:
                 ang=m.orientation.yaw
             total += (ang + pi) % (2 * pi) - pi
-        
+        Print("get_rotation: returning result")
         return round((total / len(markers))%(2*pi)-pi,4)
 
     def get_speed_prediction(self)->float:
@@ -374,3 +395,50 @@ class RobotController:
     
     def power_to_speed(self,power:float)->float:
         return power * self._speed_power_ratio
+    
+    #################
+    # Flow Control
+
+    
+
+    def time(self)->float:
+        return self._robot.time()
+
+        
+    _running:bool=False
+    def _processing_control_loop(self, program):
+        start_time=self.time()
+        lt=start_time
+        programIter=program()
+        pause_time=0
+        while self.time()-start_time<150 and self._running:
+            t = self.time()
+            dt=t-lt
+            lt=t
+            pause_time -= dt
+            if pause_time<0:
+                Print("_processing_control_loop : executing user code")
+                pause_time=next(programIter)
+            if pause_time is None:
+                self._running = False
+
+            self._step(dt)
+
+            while self.time()-t<self._target_dt:
+                self.sleep(0.001)
+        
+    def run(self, Program)->None:
+        if self.waiting_for_start:
+            self._robot.wait_start()
+            self._status^=WAITING_FOR_START
+            self._running = True
+            self._processing_control_loop(program=Program)
+        else:
+            raise InvalidMethodCallException('run',before=True)
+        
+
+    def sleep(self,seconds):
+        return seconds
+
+    def step(self):
+        return 0
