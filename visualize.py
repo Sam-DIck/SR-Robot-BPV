@@ -84,9 +84,9 @@ while running:
     markers = [(data[i],data[i+1],data[i+2]) for i in range(12,len(data),3)]
     surface.fill((0,0,0))
     pos = pos_to_screen(posX,posY)
-    p1 = pos[0] + 10*cos(pi-rot),    pos[1] + 10*sin(pi-rot)
-    p2 = pos[0] + 10*cos(pi-rot+2.5),pos[1] + 10*sin(pi-rot+2.5)
-    p3 = pos[0] + 10*cos(pi-rot-2.5),pos[1] + 10*sin(pi-rot-2.5)
+    p1 = pos[0] + 10*cos(pi+rot),    pos[1] + 10*sin(pi+rot)
+    p2 = pos[0] + 10*cos(pi+rot+2.5),pos[1] + 10*sin(pi+rot+2.5)
+    p3 = pos[0] + 10*cos(pi+rot-2.5),pos[1] + 10*sin(pi+rot-2.5)
     col = (255,0,0) if not derived else (100,0,0)
     pygame.draw.polygon(surface,col,[p1,p2,p3])
     # pygame.draw.circle(surface,col,pos,10)

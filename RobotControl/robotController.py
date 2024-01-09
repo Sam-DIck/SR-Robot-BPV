@@ -1,9 +1,10 @@
 from sr.robot3 import Robot
 from sr.robot3.motor_devices import Motor # type: ignore
 from sr.robot3.camera import Marker
+from test import start
 from .vector import Vec3
 from .PID import PID
-from math import sin,cos,tan,sqrt,pi
+from math import sin,cos,tan,pi
 
 FILTERING_ALPHA=1
 
@@ -12,6 +13,7 @@ WAITING_FOR_START=1
 STATIONARY=2
 DRIVING=4
 USING_DERIVED=8
+
 
 DRIVING_MODE_NONE=0
 DRIVING_MODE_RELATIVE=1
@@ -52,20 +54,22 @@ WALL_MARKER_POSIIONS = [
     (2.875 , -2.154)
 ]
 
+# DEBUG: ############################################################
 from time import time
 __debug_start_time = time()
 def Print(*args, **kwargs):
+    '''for Debug purposes, adds time infront of message and prints'''
     t= time()-__debug_start_time
     sec = round(t%60,3)
     min = round((t/60))
-    print(f"{min}:{sec}\t| ",*args, **kwargs)
+    # print(f"{min}:{sec}\t| ",*args, **kwargs)
 
 class InvalidMethodCallException(Exception):
     def __init__(self,method_name:str,/,before:bool=False):
-
         super().__init__(f"'{method_name}' can only be called {'before' if before  else 'after'} the process is started.")
 
 class MotorMapping:
+    '''Maps a motor reference to its hardware connections'''
     motor_board:str
     motor_index:int
     def __init__(self,/,motor_board:str,motor_index:int)->None:
@@ -98,7 +102,8 @@ class RobotController:
     _lt:float=_robot.time()
     
     # status
-    _status:int=WAITING_FOR_START
+    _waiting_for_start:bool=True
+    _using_derived:bool=False
     _driving_mode:int=DRIVING_MODE_NONE
 
     # generated
@@ -134,12 +139,28 @@ class RobotController:
 
     @property
     def waiting_for_start(self)->bool:
-        return bool(WAITING_FOR_START&self._status)
+        return self._waiting_for_start
     @property
     def using_derived(self)->bool:
-        return bool(USING_DERIVED&self._status)
+        return self._using_derived
+    @property
+    def stationary(self)->bool:
+        return self.speed<1e-3
+    @property
+    def driving(self)->bool:
+        return self._driving_mode!=DRIVING_MODE_NONE
+    @property
+    def status_flags(self)->int:
+        flag = WAITING_FOR_START&self._waiting_for_start
+        flag += STATIONARY&self.stationary
+        flag += DRIVING&self.driving
+        flag += USING_DERIVED&self._using_derived
+        return flag
     @property
     def speed(self)->float:
+        return self._vel.magnitude
+    @property
+    def signed_speed(self)->float:
         return self._vel.dot(Vec3.from_angle(self._rot))
     @property
     def motorL(self)->Motor:
@@ -149,34 +170,31 @@ class RobotController:
         return self._robot.motor_boards[self._motorR.motor_board].motors[self._motorR.motor_index]
     @property
     def markers(self)->list[Marker]:
-        Print("markers: checking for markers")
+        '''Partially Functional: returns a list of markers visible in the camera
+        view and caches the result (this is reset when the robot moves)'''
         if self._markers is None:
-            self._robot.sleep(0.1)
-            Print("markers: detecting markers")
-            m = self._robot.camera.see()
-            Print("markers: markers detected")
+            m = stopwatch(self._robot.camera.see)
             self._markers = sorted(m,key=lambda x:x.id)
-            Print("markers: markers sorted")
         return self._markers
     @property
     def wall_markers(self)->list[Marker]:
-        Print("wall_markers: querying markers")
+        '''returns markers filtered to only include the wall markers'''
         return [m for m in self.markers if 0<=m.id<28]
     @property
     def asteroid_markers(self)->list[Marker]:
+        '''returns markers filtered to only include the asteroids'''
         return [m for m in self.markers if 150<=m.id<=199]
     
     def _step(self,dt)->None:
-        Print("_step: step occuring")
+        '''private method: performs internal calculations relating to motors, vision...'''
         if dt <=0:
-            Print(f"_step: Invalid timestep({dt}s)")
+            print(f"Invalid timestep({dt}s)")
             dt = max(0.01,dt)
         if self.waiting_for_start:
             raise InvalidMethodCallException('step')
         self._markers=None
 
-        Print("_step: getting rotation")
-        rot = self.get_rotation()
+        rot = stopwatch(self.get_rotation)
         if self._rot is None:
             if rot is not None:
                 self._rot = rot
@@ -184,18 +202,13 @@ class RobotController:
                 self._rot=0
         
         if rot is None:
-            Print("_step: getting prediction")
             rot = self.get_rot_prediction(dt)
-        Print("_step: calculating ang vel")
         self._ang_vel = (rot-self._rot)/dt
 
 
-        Print("_step: getting position")
-        pos = self.get_position()
-        if pos is None:
-            pos = self.get_position()
+        pos = stopwatch(self.get_position)
         
-        self._status&= ~USING_DERIVED
+        self._using_derived=False
 
         if self._pos is None:
             self._vel = Vec3()
@@ -205,6 +218,7 @@ class RobotController:
                 self._pos=Vec3()
         if pos is None:
             pos = self.get_pos_prediction(dt)
+            self._using_derived=True
         else:
             pos = FILTERING_ALPHA*pos + (1-FILTERING_ALPHA) * self.get_pos_prediction(dt,use_true=True)
         
@@ -215,13 +229,16 @@ class RobotController:
         powerR = self.motorR.power
 
         if self._driving_mode==DRIVING_MODE_NONE:
-            Print("_step: driving mode: None")
             self.motorL.power = 0
             self.motorR.power = 0
         elif self._driving_mode==DRIVING_MODE_RELATIVE:
-            Print("_step: driving mode: Relative")
             self._PID_speed.set_target(self._tar_speed)
-            v = self._PID_speed.calc_strength(self.speed,dt=dt)
+            print(f'{self._rot}')
+            print(f'{self._vel=}')
+            print(f'forward={Vec3.from_angle(self._rot)}')
+            print(f'{self.speed=}')
+            print(f'{self.signed_speed=}')
+            v = self._PID_speed.calc_strength(self.signed_speed,dt=dt)
             
             self._PID_angvel.set_target(self._tar_ang_vel)
             a = self._PID_angvel.calc_strength(self._ang_vel,dt=dt)
@@ -234,19 +251,18 @@ class RobotController:
             
             
         elif self._driving_mode==DRIVING_MODE_ABSOLUTE:
-            Print("_step: driving mode: Absolute")
             pass
         elif self._driving_mode==DRIVING_MODE_POWER:
-            Print("_step: driving mode: Power")
             powerL = self._tar_powerL
             powerR = self._tar_powerR
         
-        Print("_step: clamp power")
+        
         self.motorL.power = min(1,max(-1,powerL))
         self.motorR.power = min(1,max(-1,powerR))
         Print("_step: complete")
 
     def set_power(self,/,left_motor:float|None=None,right_motor:float|None=None)->None:
+        ''' Program command: diectly set the motor power'''
         if left_motor is not None:
             self._tar_powerL = left_motor
             self._driving_mode=DRIVING_MODE_POWER
@@ -255,6 +271,7 @@ class RobotController:
             self._driving_mode=DRIVING_MODE_POWER
     
     def set_relative(self,/,speed:float=0,ang_vel:float|None=None)->None:
+        ''' Program Command: set the target speed and angular velocity for the robot'''
         self._driving_mode=DRIVING_MODE_RELATIVE
         self._tar_speed = speed
         if ang_vel is not None:
@@ -271,6 +288,7 @@ class RobotController:
             self.motorR.power = self.speed_to_power(speed)
         
     def get_marker_position(self,marker:Marker)->Vec3:
+        '''gets the Arena space position of the provided Marker'''
         return self._pos - Vec3(
                                 marker.position.distance*cos(self._rot-marker.position.horizontal_angle)/1000,
                                 marker.position.distance*sin(self._rot-marker.position.horizontal_angle)/1000,
@@ -278,11 +296,13 @@ class RobotController:
                           )
 
     def stop(self)->None:
+        ''' Program command: stop the robot from moving'''
         self.motorL.power=0
         self.motorR.power=0
         self._driving_mode=DRIVING_MODE_NONE
     
     def get_position(self,/)->Vec3|None:
+        ''' uses wall markers visible to the robot's camera to determine its location adjucsts for the camera offset'''
         pos = self._get_position()
         if pos is None:
             return None
@@ -293,6 +313,7 @@ class RobotController:
             return pos+offset
 
     def _get_position(self)->Vec3|None:
+        '''private method: uses wall markers visible to the robot's camera to determine its location'''
         ang = self._rot
         best = 0
         pair:tuple[Marker,Marker]|None = None
@@ -332,30 +353,29 @@ class RobotController:
             return Vec3(x=x,y=y,z=0)
 
     def get_rotation(self)->float|None:
-        Print("get_rotation: getting markers")
+        ''' uses wall markers visible to the robot's camera to determine its rotation'''
         markers = self.wall_markers
-        Print("get_rotation: checking marker count")
         if len(markers)==0: return None
         total = 0
-        Print("get_rotation: calculating sum")
         for m in markers:
             ang:float = 0
             if 0<=m.id<7:
-                ang=m.orientation.yaw-pi/2
+                ang=m.orientation.yaw+pi/2
             elif 7<=m.id<14:
                 ang=m.orientation.yaw+pi
             elif 14<=m.id<21:
-                ang=m.orientation.yaw+pi/2
+                ang=m.orientation.yaw-pi/2
             elif 21<=m.id<28:
                 ang=m.orientation.yaw
             total += (ang + pi) % (2 * pi) - pi
-        Print("get_rotation: returning result")
         return round((total / len(markers))%(2*pi)-pi,4)
 
     def get_speed_prediction(self)->float:
+        '''uses the motor speed to predict the robot speed'''
         return self.power_to_speed((self.motorL.power + self.motorL.power)/2)
 
     def get_ang_vel_prediction(self)->float:
+        ''' uses the motor speed to predict the robot angular velocity '''
         L=self.motorL.power
         R=self.motorR.power
         if R==L: return 0
@@ -396,49 +416,81 @@ class RobotController:
     def power_to_speed(self,power:float)->float:
         return power * self._speed_power_ratio
     
-    #################
-    # Flow Control
-
-    
+    ################
+    # Flow Control #
 
     def time(self)->float:
         return self._robot.time()
 
-        
-    _running:bool=False
     def _processing_control_loop(self, program):
+        '''private method: the motor control loop'''
         start_time=self.time()
         lt=start_time
         programIter=program()
         pause_time=0
-        while self.time()-start_time<150 and self._running:
+        running = True
+        while self.time()-start_time<150 and running:
             t = self.time()
             dt=t-lt
             lt=t
             pause_time -= dt
-            if pause_time<0:
-                Print("_processing_control_loop : executing user code")
-                pause_time=next(programIter)
-            if pause_time is None:
-                self._running = False
+            try:
+                if pause_time<0:
+                    Print("_processing_control_loop : executing user code")
+                    pause_time=stopwatch(next,programIter)
+                if pause_time is None:
+                    running = False
+            except StopIteration:
+                running = False
 
-            self._step(dt)
-
-            while self.time()-t<self._target_dt:
-                self.sleep(0.001)
+            
+            stopwatch(self._step,dt)
+            Print("beging wait for DT")
+            with open('data.csv','a') as f:
+                string = f'{self._robot.time()-start_time},{1 if self.using_derived else 0},{self._tar_ang_vel},{self._tar_speed},{self._ang_vel},{self._vel.x},{self._vel.y},{self._rot},{self._pos.x},{self._pos.y},{self.motorL.power},{self.motorR.power},'
+                for m in self.markers:
+                    string+=f',{m.id},{self.get_marker_position(m).x},{self.get_marker_position(m).y}'
+                f.write(
+                    string+'\n'
+                )
+            elapsed = self.time()-t
+            self._robot.sleep(self._target_dt+t-self.time())
+            Print("wait for DT complete")
+        self.motorL.power=0
+        self.motorR.power=0
         
     def run(self, Program)->None:
+        '''starts the execution of the motor control loop and the program logic
+        Program is a generator that yields a delay interval'''
         if self.waiting_for_start:
             self._robot.wait_start()
-            self._status^=WAITING_FOR_START
-            self._running = True
+            self._waiting_for_start=False
+            with open('data.csv','w+') as f:
+                string = 'time,derived,tar ang vel,tar speed,ang vel,velX,velY,rot,posX,posY,motorL,motorR\n'
+                f.write(string)
             self._processing_control_loop(program=Program)
         else:
             raise InvalidMethodCallException('run',before=True)
         
-
-    def sleep(self,seconds):
-        return seconds
+    def sleep(self,pause):
+        '''Program Command: halts program for <pause> seconds'''
+        return pause
 
     def step(self):
+        '''Program Command: halts program until the next execution step'''
         return 0
+
+
+def stopwatch(function, *args, **kwargs):
+    from time import time
+    sw = time()
+    result = function(*args, **kwargs)
+    elapsed = time()-sw
+    fullName = str(function)
+    fullName=fullName.strip('<>')
+    if ' of <' in fullName:
+        name = fullName.split(' of <')[0]
+    else: name = fullName
+    name = name.split(' ')[2].ljust(30)
+    # print(f'{name}: {elapsed=}')
+    return result

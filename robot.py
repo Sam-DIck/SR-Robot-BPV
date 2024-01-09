@@ -1,5 +1,5 @@
 from RobotControl import *
-import time
+from math import pi
 
 R=RobotController(
     left_motor  = MotorMapping(motor_board="srABC1",motor_index=0),
@@ -9,7 +9,7 @@ R=RobotController(
     camera_displacement=Vec3(0,0.07,0),
     speed_power_ratio=1.25,
 
-    vel_PID=PID(0,kp=-0.01,ki=0,kd=0),
+    vel_PID=PID(0,kp=-0.1,ki=0,kd=0),
     ang_PID=PID(0,kp=-0.05,ki=0,kd=0),
     
     target_dt=0.1
@@ -17,15 +17,9 @@ R=RobotController(
 
 
 def Program():
-    from math import sin,pi
-    yield R.sleep(1)
-    R.set_relative(speed=0.1)
-    for i in range(100):
-        s = sin(i*pi/2)
-        print(s)
-        R.set_power(left_motor=0.3*s,right_motor=0.3*s)
-        yield R.sleep(1)
-    yield None
+    st = R.time()
+    R.set_relative(ang_vel=pi/10)
+    yield R.sleep(20)
 
 R.run(Program)
 print("complete")
