@@ -262,7 +262,7 @@ class RobotController:
             self.motorR.power = 0
         elif self._driving_mode==DRIVING_MODE_RELATIVE:
             Print(f'{self._driving_mode=}')
-            Print(round(self.speed,3), round(self.signed_speed,3))
+            Print(f'speed={round(self.speed,3)}, signed_speed={round(self.signed_speed,3)}')
 
             self._PID_speed.set_target(self._tar_speed)
             v = self._PID_speed.calc_strength(self.signed_speed,dt=dt)
