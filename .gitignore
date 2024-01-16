@@ -1,4 +1,5 @@
 /.vscode
+/.vs
 /data.csv
 /log-zone-*.txt
 /__pycahce__
