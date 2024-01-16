@@ -9,16 +9,16 @@ R=RobotController(
     camera_displacement=Vec3(0,0.07,0),
     speed_power_ratio=1.25,
 
-    vel_PID=PID(0,kp=-0.1,ki=0,kd=0),
-    ang_PID=PID(0,kp=-0.05,ki=0,kd=0),
+    vel_PID=PID(0,kp=-0.1,ki=-0.1,kd=0),
+    ang_PID=PID(0,kp=-0.01,ki=0,kd=0),
     
     target_dt=0.1
 )
 
-
 def Program():
+    print('started')
     st = R.time()
-    R.set_relative(ang_vel=pi/10)
+    R.set_relative(speed=0.1)
     yield R.sleep(20)
 
 R.run(Program)

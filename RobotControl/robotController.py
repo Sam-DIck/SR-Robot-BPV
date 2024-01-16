@@ -1,7 +1,8 @@
+from typing import Any
 from sr.robot3 import Robot
 from sr.robot3.motor_devices import Motor # type: ignore
 from sr.robot3.camera import Marker
-from test import start
+from .Util import power_to_str
 from .vector import Vec3
 from .PID import PID
 from math import sin,cos,tan,pi
@@ -15,10 +16,12 @@ DRIVING=4
 USING_DERIVED=8
 
 
-DRIVING_MODE_NONE=0
-DRIVING_MODE_RELATIVE=1
-DRIVING_MODE_ABSOLUTE=2
-DRIVING_MODE_POWER=3
+DRIVING_MODE_NONE='NONE'
+DRIVING_MODE_RELATIVE='RELATIVE'
+DRIVING_MODE_ABSOLUTE='ABSOLUTE'
+DRIVING_MODE_POWER='POWER'
+
+
 
 WALL_MARKER_POSIIONS = [
     (2.154 ,-2.875),
@@ -62,11 +65,33 @@ def Print(*args, **kwargs):
     t= time()-__debug_start_time
     sec = round(t%60,3)
     min = round((t/60))
-    # print(f"{min}:{sec}\t| ",*args, **kwargs)
+    print(f"{min}:{sec}\t| ",*args, **kwargs)
 
 class InvalidMethodCallException(Exception):
     def __init__(self,method_name:str,/,before:bool=False):
         super().__init__(f"'{method_name}' can only be called {'before' if before  else 'after'} the process is started.")
+
+class Pause_Event:
+    SLEEP='SLEEP'
+    STATIONARY='STATIONARY'
+    STEP='STEP'
+
+    def __init__(self,type:str,**data)->None:
+        self.type=type
+        self.data=data
+        self.elapsed:float=0
+    def __getattr__(self, __name: str) -> Any:
+        return self.data.get(__name,None)
+    
+    @classmethod
+    def Sleep(cls,time:float):
+        return Pause_Event(Pause_Event.SLEEP,time=time)
+    @classmethod
+    def Stationary(cls,tolerance:float=1e-3):
+        return Pause_Event(Pause_Event.STATIONARY,tolerance=tolerance)
+    @classmethod
+    def Step(cls):
+        return Pause_Event(Pause_Event.STEP)
 
 class MotorMapping:
     '''Maps a motor reference to its hardware connections'''
@@ -92,7 +117,7 @@ class RobotController:
 
     #PID
     _PID_speed:PID=PID(0,kp=0,ki=0,kd=0)
-    _PID_angvel:PID=PID(0,kp=0,ki=0,kd=0)
+    _PID_ang:PID=PID(0,kp=0,ki=0,kd=0)
 
     # kinematics
     _pos:Vec3=None # type: ignore
@@ -104,7 +129,7 @@ class RobotController:
     # status
     _waiting_for_start:bool=True
     _using_derived:bool=False
-    _driving_mode:int=DRIVING_MODE_NONE
+    _driving_mode:str=DRIVING_MODE_NONE
 
     # generated
     
@@ -116,6 +141,8 @@ class RobotController:
 
     _tar_speed:float=0
     _tar_ang_vel:float=0
+
+    _tar_pos:Vec3=Vec3()
 
 
     def __init__(self,/,left_motor:MotorMapping,
@@ -132,7 +159,7 @@ class RobotController:
         self._camera_displacement=camera_displacement
         self._speed_power_ratio=speed_power_ratio
         self._PID_speed=vel_PID
-        self._PID_angvel=ang_PID
+        self._PID_ang=ang_PID
         self.motorL.power=0
         self.motorR.power=0
         self._target_dt=target_dt
@@ -189,7 +216,8 @@ class RobotController:
         '''private method: performs internal calculations relating to motors, vision...'''
         if dt <=0:
             print(f"Invalid timestep({dt}s)")
-            dt = max(0.01,dt)
+        dt = max(0.01,dt)
+        
         if self.waiting_for_start:
             raise InvalidMethodCallException('step')
         self._markers=None
@@ -222,44 +250,46 @@ class RobotController:
         else:
             pos = FILTERING_ALPHA*pos + (1-FILTERING_ALPHA) * self.get_pos_prediction(dt,use_true=True)
         
+
         self._vel = (pos-self._pos)/dt
         self._pos=pos
         self._rot=rot
         powerL = self.motorL.power
         powerR = self.motorR.power
-
+        Print(f'{self._driving_mode=}')
         if self._driving_mode==DRIVING_MODE_NONE:
             self.motorL.power = 0
             self.motorR.power = 0
         elif self._driving_mode==DRIVING_MODE_RELATIVE:
+            Print(f'{self._driving_mode=}')
+            Print(round(self.speed,3), round(self.signed_speed,3))
+
             self._PID_speed.set_target(self._tar_speed)
-            print(f'{self._rot}')
-            print(f'{self._vel=}')
-            print(f'forward={Vec3.from_angle(self._rot)}')
-            print(f'{self.speed=}')
-            print(f'{self.signed_speed=}')
             v = self._PID_speed.calc_strength(self.signed_speed,dt=dt)
-            
-            self._PID_angvel.set_target(self._tar_ang_vel)
-            a = self._PID_angvel.calc_strength(self._ang_vel,dt=dt)
-            if self._tar_speed > 0:
-                v = min(1,max(0,v))
-            elif self._tar_speed < 0:
-                v = min(0,max(-1,v))
+            self._PID_ang.set_target(self._tar_ang_vel)
+            a = self._PID_ang.calc_strength(self._ang_vel,dt=dt)
             powerL = v-a
             powerR = v+a
             
-            
         elif self._driving_mode==DRIVING_MODE_ABSOLUTE:
-            pass
+            raise NotImplementedError
         elif self._driving_mode==DRIVING_MODE_POWER:
             powerL = self._tar_powerL
             powerR = self._tar_powerR
         
-        
-        self.motorL.power = min(1,max(-1,powerL))
-        self.motorR.power = min(1,max(-1,powerR))
-        Print("_step: complete")
+        if powerL== 0 and powerR == 0:
+            Print(f'_step: power 0')
+            self.motorL.power = 0
+            self.motorR.power = 0
+        if max(abs(powerL),abs(powerR))>1:
+            Print(f'_step: power saturation({max(abs(powerL),abs(powerR))})')
+            powerL = powerL/max(abs(powerL),abs(powerR))
+            powerR = powerR/max(abs(powerL),abs(powerR))
+        self.motorL.power = powerL
+        self.motorR.power = powerR
+        Print('\tL: ', power_to_str(self.motorL.power))
+        Print('\tR: ', power_to_str(self.motorR.power))
+        Print("_step: complete\n\n")
 
     def set_power(self,/,left_motor:float|None=None,right_motor:float|None=None)->None:
         ''' Program command: diectly set the motor power'''
@@ -278,18 +308,15 @@ class RobotController:
             self._tar_ang_vel=ang_vel
         else:
             self._tar_ang_vel=0
-        ang_vel=self._tar_ang_vel
-        if ang_vel!=0:
-            radius=speed/ang_vel
-            self.motorL.power = self.speed_to_power(ang_vel*(radius - self._wheel_base/2))
-            self.motorR.power = self.speed_to_power(ang_vel*(radius + self._wheel_base/2))
-        else:
-            self.motorL.power = self.speed_to_power(speed)
-            self.motorR.power = self.speed_to_power(speed)
+    
+    def set_position(self,/,pos:Vec3):
+        if not (-2.875<pos.x<2.875 or -2.875<pos.y<2.875):
+            raise ValueError(f'target position {pos}, not contained with in the bounds of the arena')
+        self._tar_pos=pos
         
     def get_marker_position(self,marker:Marker)->Vec3:
         '''gets the Arena space position of the provided Marker'''
-        return self._pos - Vec3(
+        return self._pos + Vec3(
                                 marker.position.distance*cos(self._rot-marker.position.horizontal_angle)/1000,
                                 marker.position.distance*sin(self._rot-marker.position.horizontal_angle)/1000,
                                 0
@@ -422,24 +449,30 @@ class RobotController:
     def time(self)->float:
         return self._robot.time()
 
+    def _pause_event_complete(self,event:Pause_Event)->bool:
+        if event.type==Pause_Event.SLEEP:
+            return event.time<event.elapsed
+        if event.type==Pause_Event.Stationary:
+            return self.speed<event.tolerance
+        return True 
     def _processing_control_loop(self, program):
         '''private method: the motor control loop'''
         start_time=self.time()
         lt=start_time
         programIter=program()
-        pause_time=0
+        pause_event:Pause_Event|None=None
         running = True
         while self.time()-start_time<150 and running:
             t = self.time()
             dt=t-lt
             lt=t
-            pause_time -= dt
+            if pause_event is not None:
+                pause_event.elapsed+=dt
             try:
-                if pause_time<0:
+                if pause_event is None: pause_event=stopwatch(next,programIter)
+                elif self._pause_event_complete(pause_event):
                     Print("_processing_control_loop : executing user code")
-                    pause_time=stopwatch(next,programIter)
-                if pause_time is None:
-                    running = False
+                    pause_event = stopwatch(next,programIter)
             except StopIteration:
                 running = False
 
@@ -447,13 +480,12 @@ class RobotController:
             stopwatch(self._step,dt)
             Print("beging wait for DT")
             with open('data.csv','a') as f:
-                string = f'{self._robot.time()-start_time},{1 if self.using_derived else 0},{self._tar_ang_vel},{self._tar_speed},{self._ang_vel},{self._vel.x},{self._vel.y},{self._rot},{self._pos.x},{self._pos.y},{self.motorL.power},{self.motorR.power},'
+                string = f'{self._robot.time()-start_time},{1 if self.using_derived else 0},{self._tar_ang_vel},{self._tar_speed},{self._ang_vel},{self._vel.x},{self._vel.y},{self._rot},{self._pos.x},{self._pos.y},{self.motorL.power},{self.motorR.power}'
                 for m in self.markers:
                     string+=f',{m.id},{self.get_marker_position(m).x},{self.get_marker_position(m).y}'
                 f.write(
                     string+'\n'
                 )
-            elapsed = self.time()-t
             self._robot.sleep(self._target_dt+t-self.time())
             Print("wait for DT complete")
         self.motorL.power=0
@@ -472,13 +504,13 @@ class RobotController:
         else:
             raise InvalidMethodCallException('run',before=True)
         
-    def sleep(self,pause):
+    def sleep(self,pause:float):
         '''Program Command: halts program for <pause> seconds'''
-        return pause
+        return Pause_Event.Sleep(pause)
 
     def step(self):
         '''Program Command: halts program until the next execution step'''
-        return 0
+        return Pause_Event.Step()
 
 
 def stopwatch(function, *args, **kwargs):

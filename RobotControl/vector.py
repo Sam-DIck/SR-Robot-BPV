@@ -5,24 +5,14 @@ class Vec3:
     x:float
     y:float
     z:float
-    def __init__(self,x:float|int|None=None,y:float|int|None=None,z:float|int|None=None) -> None:
-        ''' Vec3()      -> Vec3(x=0,y=0,z=0)
-        Vec3(val)   -> Vec3(x=val,y=val,z=val)
-        Vec3(x,y,z) -> Vec3(x=x,y=y,z=z)'''
-        if x is None and y is None and z is None:
-            self.x=0
-            self.y=0
-            self.z=0
-        elif x is not None and y is None and z is None:
-            self.x=x
-            self.y=x
-            self.z=x
-        elif x is not None and y is not None and z is not None: 
-            self.x=x
-            self.y=y
-            self.z=z
-        else:
-            raise ValueError("No overload of Vec3.__init__ accepts 2 arguments")
+    def __init__(self,x:float|int=0,y:float|int|None=None,z:float|int|None=None) -> None:
+        if x is not None and y is None and z is None:
+            y=x
+            z=x
+        self.x=x
+        self.y=y
+        self.z=z
+        
     
     @property
     def sqr_magnitude(self)->float:
@@ -35,8 +25,7 @@ class Vec3:
     def normalised(self)->Vec3:
         return self/self.magnitude
     def dot(self,other:Vec3)->float:
-        print(f'{self=},{other=}')
-        result = self.x*other.x+self.y*other.y+self.z+other.z
+        result = self.x*other.x+self.y*other.y+self.z*other.z
         return result
     @classmethod
     def from_angle(cls,angle:float)->Vec3:

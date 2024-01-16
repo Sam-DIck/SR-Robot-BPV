@@ -53,13 +53,16 @@ while running:
     mouse_pos = pygame.mouse.get_pos()
     ### ^^^ User Input ^^^
 
-
+    def disp(val):
+        print(val)
+        return val
 
     try:
         with open('data.csv','r') as f:
             lines = f.read().split('\n')
             if len(lines)<=2:
                 continue
+            
             Data = [[float(dataPoint) for dataPoint in dataEntry.split(',')] for dataEntry in lines[1:-1]]
     except IOError:
         pass
@@ -101,6 +104,13 @@ while running:
         if dist < 100:
             shown = (id,x,y)
     T = font.render(f'Robot| px={data[8]:.3f} py={data[9]:.3f} vx={velX:.3f} vy={velY:.3f}',True,(255,255,255))
+    pygame.draw.rect(surface,(255,255,0),pygame.Rect(535,475,10,100))
+    if motorL<0: pygame.draw.rect(surface,(255,0,0),pygame.Rect(535,475,10,int(motorL*100)))
+    else: pygame.draw.rect(surface,(0,255,0),pygame.Rect(535,575-int(motorL*100),10,int(motorL*100)))
+    pygame.draw.rect(surface,(255,255,0),pygame.Rect(555,475,10,100))
+    if motorR<0: pygame.draw.rect(surface,(255,0,0),pygame.Rect(555,475,10,int(motorR*100)))
+    else: pygame.draw.rect(surface,(0,255,0),pygame.Rect(555,575-int(motorR*100),10,int(motorR*100)))
+    # pygame.draw.rect(surface,(255 if motorR>0 else 128,255 if motorR<0 else 128,0),pygame.Rect(475,565,int(motorR*100),10))
     surface.blit(T,(20,535))
     if shown is not None:
         id,x,y = shown
